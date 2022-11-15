@@ -56,7 +56,9 @@ num_classes = 10
 train_labels = to_categorical(train_labels, num_classes)
 test_labels = to_categorical(test_labels, num_classes)
 
-for model_name in ["v1", "v2", "v3"]:
+
+model_perf = {}
+for model_name in ["v1", "v2", "v3", "v5"]:
 	G = NNGraph.load_graph(f"cifar10_model_{model_name}_fp32.tflite", load_quantization=False)
 	#G.draw(filepath="draw", view=True)
 	max_activ_size, total_params = get_graph_memory_usage(G.graph_state.steps, G.graph_state.liveness)
@@ -87,5 +89,37 @@ for model_name in ["v1", "v2", "v3"]:
 	    },
 	)
 	print("Testing....")
-	nntool_quant_accuracy = nntool_inference(G, test_images[:1000], test_labels[:1000])
+	nntool_quant_accuracy = nntool_inference(G, test_images[:100], test_labels[:100])
 	print(f"Quantized model accuracy: {nntool_quant_accuracy}")
+
+	# Autotiler options: make the autotiler allocate the input of the network and reuse that space after the first layer
+	# more L2 for the rest of the network
+	G[0].at_options.allocate = 1
+	G[0].at_options
+	res = G.execute_on_target(
+	    pmsis_os='freertos',
+	    platform="gvsoc",
+	    directory="test_run",
+	    output_tensors=0,
+	    at_log=True,
+	    dont_run=False,
+	    do_clean=False,
+	    settings={
+	        'l1_size': 64000,
+	        'l2_size': 200000, 
+	        'tensor_directory': './tensors',
+	        'graph_const_exec_from_flash': True,
+	    },
+	    #cmake=False,
+	    at_loglevel=1,
+	)
+	for l in res.at_log:
+	    print(l)
+	model_perf[model_name] = {"acc": nntool_quant_accuracy, "cyc": res.performance[-1][1], "op": res.performance[-1][2], "op/cyc": res.performance[-1][3], "tot_params": total_params}
+	print(model_perf)
+
+############# FINAL RESULTS ##############
+#'v1': {'acc': 68.0, 'cyc': 8931716, 'op': 37550816, 'op/cyc': 4.20, 'tot_params': 1438522}
+#'v2': {'acc': 69.0, 'cyc': 6649951, 'op': 30844298, 'op/cyc': 4.63, 'tot_params':  569370}
+#'v3': {'acc': 58.0, 'cyc': 2203115, 'op': 10104970, 'op/cyc': 4.58, 'tot_params':  253978}
+#'v5': {'acc': 65.0, 'cyc':  815722, 'op':  2807178, 'op/cyc': 3.44, 'tot_params':  297754}
