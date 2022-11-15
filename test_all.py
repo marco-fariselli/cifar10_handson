@@ -12,12 +12,12 @@ from nntool.graph.types import ConstantInputNode
 import math
 from tqdm import tqdm
 
-def nntool_inference(graph, test_images, test_labels, hwc=False):
+def nntool_accuracy(graph, test_images, test_labels, hwc=False, quantize=True):
     predictions = np.zeros((len(test_images),), dtype=int)
     for i, (test_image, test_label) in enumerate(tqdm(zip(test_images, test_labels), total=len(test_labels))):
         if not hwc:
             test_image = test_image.transpose((2,0,1))
-        output = graph.execute([test_image], dequantize=True)
+        output = graph.execute([test_image], dequantize=quantize)
         predictions[i] = output[-1][0].argmax()
 
     test_labels_not_one_hot = np.argmax(test_labels, 1)
@@ -89,7 +89,9 @@ for model_name in ["v1", "v2", "v3", "v5"]:
 	    },
 	)
 	print("Testing....")
-	nntool_quant_accuracy = nntool_inference(G, test_images[:100], test_labels[:100])
+	nntool_float_accuracy = nntool_accuracy(G, test_images[:100], test_labels[:100], quantize=False)
+	print(f"Full Prec model accuracy: {nntool_float_accuracy}")
+	nntool_quant_accuracy = nntool_accuracy(G, test_images[:100], test_labels[:100])
 	print(f"Quantized model accuracy: {nntool_quant_accuracy}")
 
 	# Autotiler options: make the autotiler allocate the input of the network and reuse that space after the first layer
@@ -115,11 +117,18 @@ for model_name in ["v1", "v2", "v3", "v5"]:
 	)
 	for l in res.at_log:
 	    print(l)
-	model_perf[model_name] = {"acc": nntool_quant_accuracy, "cyc": res.performance[-1][1], "op": res.performance[-1][2], "op/cyc": res.performance[-1][3], "tot_params": total_params}
+	model_perf[model_name] = {
+		"full_prec_acc": nntool_float_accuracy,
+		"quant_acc": nntool_quant_accuracy,
+		"cyc": res.performance[-1][1],
+		"op": res.performance[-1][2],
+		"op/cyc": res.performance[-1][3],
+		"tot_params": total_params
+	}
 	print(model_perf)
 
 ############# FINAL RESULTS ##############
-#'v1': {'acc': 68.0, 'cyc': 8931716, 'op': 37550816, 'op/cyc': 4.20, 'tot_params': 1438522}
-#'v2': {'acc': 69.0, 'cyc': 6649951, 'op': 30844298, 'op/cyc': 4.63, 'tot_params':  569370}
-#'v3': {'acc': 58.0, 'cyc': 2203115, 'op': 10104970, 'op/cyc': 4.58, 'tot_params':  253978}
-#'v5': {'acc': 65.0, 'cyc':  815722, 'op':  2807178, 'op/cyc': 3.44, 'tot_params':  297754}
+#'v1': {'full_prec_acc': 68.0, 'quant_acc': 68.0, 'cyc': 8931716, 'op': 37550816, 'op/cyc': 4.20, 'tot_params': 1438522}
+#'v2': {'full_prec_acc': 68.0, 'quant_acc': 69.0, 'cyc': 6649951, 'op': 30844298, 'op/cyc': 4.63, 'tot_params':  569370}
+#'v3': {'full_prec_acc': 57.0, 'quant_acc': 58.0, 'cyc': 2203115, 'op': 10104970, 'op/cyc': 4.58, 'tot_params':  253978}
+#'v5': {'full_prec_acc': 65.0, 'quant_acc': 65.0, 'cyc':  815722, 'op':  2807178, 'op/cyc': 3.44, 'tot_params':  297754}
