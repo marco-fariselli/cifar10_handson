@@ -1,0 +1,5 @@
+tensorflow==2.7.0
+tensorflow-model-optimization
+tqdm
+matplotlib
+Pillow==9.2
