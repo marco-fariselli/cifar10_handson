@@ -1,5 +1,5 @@
 from nntool.api import NNGraph
-from model import *
+from keras_model import *
 import tensorflow as tf
 import keras as keras
 from keras import datasets

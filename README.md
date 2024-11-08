@@ -7,13 +7,14 @@
 Complete the following table:
 
 
-| Model | Float Accuracy | Quant Accuracy | Ops    | Parameters | Cyc    | Op/Cyc | Why is this better than previous? |
-|-------|----------------|----------------|--------|------------|--------|--------|-----------------------------------|
-| v1    |                |                |        |            |        |        |                                   |
-| v2    |                |                |        |            |        |        |                                   |
-| v3    |                |                |        |            |        |        |                                   |
-| v4    |                |                |        |            |        |        |                                   |
+| Model | Float Accuracy | Quant Accuracy | Ops    | Parameters | Coeff Size deployment* | Cyc    | Op/Cyc | Why is this better than previous? |
+|-------|----------------|----------------|--------|------------|------------------------|--------|--------|-----------------------------------|
+| v1    |                |                |        |            |                        |        |        |                                   |
+| v2    |                |                |        |            |                        |        |        |                                   |
+| v3    |                |                |        |            |                        |        |        |                                   |
+| v4    |                |                |        |            |                        |        |        |                                   |
 
+*Size of the NN coefficients to deploy (flash usage).
 
 ## Exercise 2:
 
