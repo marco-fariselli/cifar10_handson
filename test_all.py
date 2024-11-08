@@ -1,18 +1,26 @@
 from nntool.api import NNGraph
-from tensorflow.keras import datasets
-from tensorflow.keras.utils import to_categorical
+import tensorflow as tf
+from keras import datasets
+from keras.utils import to_categorical
 import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import logging
 logging.basicConfig(level=logging.ERROR)
-from nntool.reports.graph_reporter import graph_walk
-from nntool.graph.types import ConstantInputNode
-import math
+from nntool.api.utils import quantization_options, model_settings
 from tqdm import tqdm
+import pandas as pd
 
-def nntool_accuracy(graph, test_images, test_labels, hwc=False, quantize=True):
+USE_NE16 = False
+HWC = False
+L1_SIZE = 64000
+L2_SIZE = int(200*1024)
+
+def representative_dataset(hwc=HWC or USE_NE16):
+	for input_tensor in tqdm(CALIBRATION_IMGS):
+		if not hwc:
+			input_tensor = input_tensor.transpose(2, 0, 1)
+		yield input_tensor
+
+def nntool_accuracy(graph, test_images, test_labels, hwc=HWC or USE_NE16, quantize=True):
     predictions = np.zeros((len(test_images),), dtype=int)
     for i, (test_image, test_label) in enumerate(tqdm(zip(test_images, test_labels), total=len(test_labels))):
         if not hwc:
@@ -24,20 +32,6 @@ def nntool_accuracy(graph, test_images, test_labels, hwc=False, quantize=True):
     accuracy = (np.sum(test_labels_not_one_hot == predictions) * 100) / len(test_images)
     return accuracy
 
-def get_graph_memory_usage(steps, liveness, quantization_set=None):
-    max_active = 0
-    tot_params = 0
-    for _, node, active, params_size, _ in graph_walk(steps, liveness):
-        if isinstance(node, ConstantInputNode) and node.use_compressed:
-            bits_per_element = node.compressed_value.bits
-        elif quantization_set:
-            bits_per_element = quantization_set[node.name].out_qs[0].bits
-        else:
-            bits_per_element = 8
-        tot_params += (params_size * bits_per_element)
-        if active > max_active:
-            max_active = active
-    return max_active, math.ceil(tot_params/8)
 
 (train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()
 train_images, train_labels = train_images[:10000], train_labels[:10000]
@@ -57,11 +51,12 @@ train_labels = to_categorical(train_labels, num_classes)
 test_labels = to_categorical(test_labels, num_classes)
 
 
-model_perf = {}
-for model_name in ["v1", "v2", "v3", "v5"]:
-	G = NNGraph.load_graph(f"cifar10_model_{model_name}_fp32.tflite", load_quantization=False)
+model_perf = pd.DataFrame()
+for model_name in ["v1", "v2", "v3", "v4"]:
+	checkpoint_path = f"./checkpoints/saved_model_{model_name}/"
+	G = NNGraph.load_graph(f"{checkpoint_path}/cifar10_model_{model_name}_fp32.tflite", load_quantization=False)
 	#G.draw(filepath="draw", view=True)
-	max_activ_size, total_params = get_graph_memory_usage(G.graph_state.steps, G.graph_state.liveness)
+	max_activ_size, total_params = G.total_memory_usage
 	ops = G.total_ops
 
 	print(f"{G.name}:")
@@ -72,21 +67,15 @@ for model_name in ["v1", "v2", "v3", "v5"]:
 	G.fusions('scaled_match_group')
 	G.fusions('expression_matcher')
 	CALIBRATION_IMGS = train_images[:50]
-	def representative_dataset(hwc=False):
-	    for input_tensor in tqdm(CALIBRATION_IMGS):
-	        if not hwc:
-	            input_tensor = input_tensor.transpose(2, 0, 1)
-	        yield input_tensor
 
 	print("Calibrating...")
 	stats = G.collect_statistics(representative_dataset())
 	G.quantize(
 	    statistics=stats,
-	    graph_options={
-	        'bits': 8,
-	        'use_ne16': False,
-	        'hwc': False
-	    },
+	    graph_options=quantization_options(
+			use_ne16=USE_NE16,
+	        hwc=USE_NE16
+		),
 	)
 	print("Testing....")
 	nntool_float_accuracy = nntool_accuracy(G, test_images[:100], test_labels[:100], quantize=False)
@@ -104,19 +93,15 @@ for model_name in ["v1", "v2", "v3", "v5"]:
 	    directory="test_run",
 	    output_tensors=0,
 	    at_log=True,
-	    dont_run=False,
-	    do_clean=False,
-	    settings={
-	        'l1_size': 64000,
-	        'l2_size': 200000, 
-	        'tensor_directory': './tensors',
-	        'graph_const_exec_from_flash': True,
-	    },
-	    #cmake=False,
+	    settings=model_settings(
+	        l1_size=L1_SIZE,
+	        l2_size=L2_SIZE, 
+	        tensor_directory='./tensors',
+	        graph_const_exec_from_flash=True,
+		),
 	    at_loglevel=1,
+		progress=True,
 	)
-	for l in res.at_log:
-	    print(l)
 	model_perf[model_name] = {
 		"full_prec_acc": nntool_float_accuracy,
 		"quant_acc": nntool_quant_accuracy,
@@ -125,7 +110,7 @@ for model_name in ["v1", "v2", "v3", "v5"]:
 		"op/cyc": res.performance[-1][3],
 		"tot_params": total_params
 	}
-	print(model_perf)
+	print(model_perf.T)
 
 ############# FINAL RESULTS ##############
 #'v1': {'full_prec_acc': 68.0, 'quant_acc': 68.0, 'cyc': 8931716, 'op': 37550816, 'op/cyc': 4.20, 'tot_params': 1438522}

@@ -1,12 +1,10 @@
 from nntool.api import NNGraph
-from model_v1 import *
-import tensorflow.keras as keras
+from model import *
 import tensorflow as tf
-from tensorflow.keras.datasets import cifar10
-from tensorflow.keras import datasets
-from tensorflow.keras.utils import to_categorical
+import keras as keras
+from keras import datasets
+from keras.utils import to_categorical
 import pathlib
-from PIL import Image
 
 N_EPOCHS = 20
 
@@ -41,14 +39,14 @@ for MODEL_VERSION in range(2,4):
     elif MODEL_VERSION == 4:
         model = model_v4()
         model_name = "v4"
-        
+
     model.summary()
     checkpoint_path = f"./checkpoints/saved_model_{model_name}/"
     model.compile(optimizer='adam', loss=keras.losses.categorical_crossentropy, metrics=['accuracy'])
     history = model.fit(train_images, train_labels, batch_size=128, epochs=N_EPOCHS, # Add more epochs to get better results
                       validation_data=(test_images, test_labels))
     model.save(checkpoint_path)
-    tflite_model_file = pathlib.Path(f"cifar10_model_{model_name}_fp32.tflite")
+    tflite_model_file = pathlib.Path(f"{checkpoint_path}cifar10_model_{model_name}_fp32.tflite")
     # Converting a tf.Keras model to a TensorFlow Lite model.
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_model = converter.convert()

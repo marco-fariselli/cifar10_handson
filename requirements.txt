@@ -3,3 +3,4 @@ tensorflow-model-optimization
 tqdm
 matplotlib
 Pillow==9.2
+pandas
