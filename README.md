@@ -1,4 +1,4 @@
-# ETH Lecture exercise
+# COFAR10 handson
 
 4 models have been trained on the Cifar10 dataset. Each model has some improvements wrt the previous one to make it faster on the GAP9 architecture.
 
